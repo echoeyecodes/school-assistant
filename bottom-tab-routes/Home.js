@@ -1,35 +1,52 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useContext, useRef } from "react";
 import {
   StyleSheet,
   Text,
   View,
-  Image,
   RefreshControl,
-  ScrollView
+  ScrollView,
+  AsyncStorage,
+  TouchableWithoutFeedback
 } from "react-native";
+import { FAB, Snackbar} from "react-native-paper";
 import { Ionicons, AntDesign, Entypo } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import mockData from "../util/courses";
+import {Upcoming, EmptyImage} from '../components/ClassesComponents'
+import {ThemeContext} from '../context/ThemeContext'
+import {formatDay} from '../util/formatDate'
 
 const MostRecent = ({ data = {}, currentSeconds }) => {
   const [isActive, setIsActive] = useState(false);
-  const [timeRemaining, setTimeRemaining] = useState('')
+  const [timeRemaining, setTimeRemaining] = useState("");
 
-  const getTimeRemaining =() =>{
-    const destHours = (data.endTimeSeconds/60/60)
-    const currentHours = (currentSeconds/60/60)
-    const hours = (destHours-currentHours)
-    const minutes = parseInt(parseFloat(`0.${(hours.toString().split('.').pop())}`) * 60)
-    setTimeRemaining(parseInt(hours) === 0 ? `${minutes} mins remaining` : (parseInt(hours) === 2) ? `${parseInt(hours)} hrs remaining` : `${parseInt(hours)} hrs : ${minutes} mins remaining`)
-  }
-  
+  const getTimeRemaining = () => {
+    const destHours = data.endTimeSeconds / 60 / 60;
+    const currentHours = currentSeconds / 60 / 60;
+    const hours = destHours - currentHours;
+    const minutes = parseInt(
+      parseFloat(
+        `0.${hours
+          .toString()
+          .split(".")
+          .pop()}`
+      ) * 60
+    );
+    setTimeRemaining(
+      parseInt(hours) === 0
+        ? `${minutes} mins remaining`
+        : parseInt(hours) === 2
+        ? `${parseInt(hours)} hrs remaining`
+        : `${parseInt(hours)} hrs : ${minutes} mins remaining`
+    );
+  };
+
   useEffect(() => {
     if (
       currentSeconds >= data.startTimeSeconds &&
       currentSeconds <= data.endTimeSeconds
     ) {
       setIsActive(true);
-      getTimeRemaining()
+      getTimeRemaining();
       return;
     }
     setIsActive(false);
@@ -56,9 +73,9 @@ const MostRecent = ({ data = {}, currentSeconds }) => {
               size={18}
             />
           </View>
-          <Text
-            style={styles.time}
-          >{isActive ? timeRemaining : `${data.startTime} - ${data.endTime}`}</Text>
+          <Text style={styles.time}>
+            {isActive ? timeRemaining : `${data.startTime} - ${data.endTime}`}
+          </Text>
         </View>
 
         <View style={styles.lectureDetailsItem}>
@@ -87,81 +104,87 @@ const MostRecent = ({ data = {}, currentSeconds }) => {
   );
 };
 
-const UpcomingItem = ({ title, full, time, fixed = false }) => {
-  return (
-    <View
-      style={[
-        styles.upcomingItem,
-        fixed ? { borderLeftColor: "#de5246", borderLeftWidth: 3 } : null
-      ]}
-    >
-      <Text style={styles.courseTitle}>{title}</Text>
-      <Text style={styles.courseFull}>{full}</Text>
-      <Text style={styles.courseTime}>{time}</Text>
-    </View>
-  );
-};
+const Home = props => {
+  const [data, setData] = useState([]);
+  const [seconds, setSeconds] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const [snackbarShowing, setSnackbarShowing] = useState(false);
+  const timer = useRef(null)
+  const {theme} = useContext(ThemeContext)
 
-const Upcoming = ({ data }) => {
-  return (
-    <View>
-      {data.map((item, index) => (
-        <UpcomingItem
-          key={index}
-          title={item.courseCode}
-          full={item.courseTitle}
-          time={`${item.startTime} - ${item.endTime}`}
-        />
-      ))}
-    </View>
-  );
-};
+  const fetchCoursesServer = () => {
+    setRefreshing(true)
+    fetch("http://192.168.43.31:3000/courses", {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json"
+      }
+    }).then(data => data.json().then(async response => {
+          await AsyncStorage.setItem("school-assistant-courses", JSON.stringify(response.data));
+          fetchData()
+        })
+      ).catch(error =>{
+        fetchData()
+        setSnackbarShowing(true)
+        setRefreshing(false)
+      });
+  };
 
-const EmptyImage = () => {
-  return (
-    <View style={styles.emptyImageHolder}>
-      <Image
-        style={styles.emptyImage}
-        source={require("../assets/empty_task.png")}
-      />
-      <Text style={styles.emptyText}>You're caught up for today!</Text>
-    </View>
-  );
-};
+  const fetchData = async () => {
+    const courseData = await AsyncStorage.getItem("school-assistant-courses");
+    if (courseData) {
+      const sortedData = JSON.parse(courseData).filter(item => item.dayOfTheWeek === formatDay(new Date().getDay())).sort(
+        (item1, item2) => item1.startTimeSeconds - item2.startTimeSeconds
+      );
+      let date = new Date();
+      const currentSeconds = date.getHours() * 60 * 60 + date.getMinutes() * 60;
+      let newData = sortedData.filter(
+        item => item.endTimeSeconds > currentSeconds
+      );
+      setSeconds(currentSeconds);
+      setData(newData);
+      setRefreshing(false)
+      return;
+    }
+    setData([]);
+    setRefreshing(false)
+  };
 
-const Home = () => {
-    const [data, setData] = useState([]);
-    const [seconds, setSeconds] = useState(0);
-    const [refreshing, setRefreshing] = useState(false);
-
-  const fetchData = () => {
-    const sortedData = mockData.sort((item1, item2) => item1.startTimeSeconds - item2.startTimeSeconds);
-    let date = new Date();
-    const currentSeconds = (date.getHours() * 60 * 60) + (date.getMinutes() * 60);
-    let newData = sortedData.filter(
-      item => item.endTimeSeconds > currentSeconds
-    );
-    setSeconds(currentSeconds);
-    setData(newData);
+  const isShowingCreateClass = () => {
+    props.navigation.navigate("CreateClass");
   };
 
   const refresh = useCallback(() => {
-    setRefreshing(true)
-    fetchData()
-    setTimeout(() => {
-      setRefreshing(false);
-    }, 2000);
+    fetchCoursesServer()
   }, [refreshing]);
 
   useEffect(() => {
-    fetchData()
-    setInterval(() =>{
+    fetchCoursesServer()
+   timer.current = setInterval(() => {
       fetchData();
     }, 5000)
+
+    return () =>{
+      clearInterval(timer.current)
+    }
   }, []);
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, {backgroundColor: theme.backgroundColor}]}>
+      <Snackbar
+        visible={snackbarShowing}
+        onDismiss={() => setSnackbarShowing(false)}
+        duration={2000}
+        action={{
+          label: "Okay",
+          onPress: () => {
+            // Do something
+          }
+        }}
+      >
+        Couldn't connect to Server.
+      </Snackbar>
       <ScrollView
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={refresh} />
@@ -174,18 +197,33 @@ const Home = () => {
               <Text
                 style={[
                   styles.descriptive,
-                  { color: "rgba(0,0,0,0.5)", paddingHorizontal: 5 }
+                  { color: theme.colorSecondary, paddingHorizontal: 5 }
                 ]}
               >
                 Upcoming classes
               </Text>
-              {data.length - 1 > 0 ? <Upcoming data={data.slice(1)} /> : <EmptyImage />}
+              {data.length - 1 > 0 ? (
+                <Upcoming data={data.slice(1)} />
+              ) : (
+                <EmptyImage msg="You're caught up for today" />
+              )}
             </View>
           </View>
         ) : (
-          <EmptyImage />
+          <EmptyImage msg="You're caught up for today" />
         )}
+         <TouchableWithoutFeedback onPress={() => props.navigation.navigate('AllClasses')}>
+        <View style={styles.allClassesBtn}>
+          <Text style={styles.allClassesText}>ALL CLASSES</Text>
+        </View>
+      </TouchableWithoutFeedback>
       </ScrollView>
+      <FAB
+        style={styles.fab}
+        color="#fff"
+        icon="plus"
+        onPress={() => isShowingCreateClass()}
+      />
     </View>
   );
 };
@@ -193,7 +231,6 @@ const Home = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fff"
   },
   mostRecentContainer: {
     padding: 10,
@@ -235,34 +272,25 @@ const styles = StyleSheet.create({
     marginHorizontal: 20,
     marginVertical: 5
   },
-  upcomingItem: {
-    marginVertical: 5,
-    paddingHorizontal: 5
+  fab: {
+    position: "absolute",
+    margin: 16,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "#4c8bf5"
   },
-  courseTitle: {
-    color: "black",
-    fontFamily: "atlas",
-    fontSize: 18
+  allClassesBtn:{
+    backgroundColor: '#4c8bf5',
+    borderRadius: 5,
+    padding: 10,
+    marginVertical: 10,
+    marginHorizontal: 10
   },
-  courseFull: {
-    color: "rgba(0,0,0,0.5)"
-  },
-  courseTime: {
-    color: "rgba(0,0,0,0.5)",
-    fontWeight: "bold"
-  },
-  emptyImageHolder: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center"
-  },
-  emptyImage: {
-    width: 200,
-    height: 200
-  },
-  emptyText: {
-    fontSize: 18,
-    fontFamily: "normal-default"
+  allClassesText:{
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 14,
+    textAlign: 'center'
   }
 });
 

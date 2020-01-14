@@ -1,20 +1,13 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useContext } from "react";
 import { View, StyleSheet, Text, ScrollView, RefreshControl } from "react-native";
 import { Appbar, TouchableRipple, FAB } from "react-native-paper";
 import { FontAwesome } from "@expo/vector-icons";
 import CreateModal from "../ModalComponents/CreateModal";
 import CreateFolderModal from "../ModalComponents/CreateFolder";
-const TopBar = () => {
-  return (
-    <Appbar.Header style={{ backgroundColor: "white", elevation: 0 }}>
-      <View style={styles.appBarContainer}>
-        <Text style={styles.greetings}>Vault</Text>
-      </View>
-    </Appbar.Header>
-  );
-};
+import {ThemeContext} from '../context/ThemeContext'
 
 const Folders = ({ title, openFolder }) => {
+  const {theme} = useContext(ThemeContext)
   return (
     <TouchableRipple
       onPress={() => openFolder(title)}
@@ -22,16 +15,17 @@ const Folders = ({ title, openFolder }) => {
     >
       <View style={styles.folderItem}>
         <View style={styles.folderIconHolder}>
-          <FontAwesome name="folder" color="rgba(0,0,0,0.5)" size={30} />
+          <FontAwesome name="folder" color={theme.colorSecondary} size={30} />
         </View>
         <View style={styles.folderTitleHolder}>
-          <Text style={styles.folderTitle}>{title}</Text>
+          <Text style={[styles.folderTitle, {color: theme.colorPrimary}]}>{title}</Text>
         </View>
       </View>
     </TouchableRipple>
   );
 };
 const Vault = props => {
+  const {theme} = useContext(ThemeContext)
   const [refreshing, setRefreshing] = useState(false)
   const [createModalShowing, setCreateModalShowing] = useState(false);
   const [createFolderModalShowing, setCreateFolderModalShowing] = useState(
@@ -81,7 +75,10 @@ const Vault = props => {
       const newFolderItem = [...data.data]
       setFolders(newFolderItem)
       setRefreshing(false)
-    }))
+    })).catch(error =>{
+      setRefreshing(false)
+      setFolders([])
+    })
   }
 
   const refresh =() =>{
@@ -90,9 +87,16 @@ const Vault = props => {
 
   useEffect(() =>{
    getFolders()
+
+   return () =>{
+     setRefreshing(false)
+     setCreateFolderModalShowing(false)
+     setCreateModalShowing(false)
+     setFolders([])
+   }
   }, [])
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, {backgroundColor: theme.backgroundColor}]}>
       <CreateFolderModal
         visible={createFolderModalShowing}
         addFolder={addFolder}
@@ -122,20 +126,7 @@ const Vault = props => {
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1
-  },
-  appBarContainer: {
     flex: 1,
-    justifyContent: "flex-start",
-    paddingHorizontal: 5,
-    alignItems: "center",
-    flexDirection: "row"
-  },
-  greetings: {
-    color: "black",
-    fontSize: 22,
-    marginHorizontal: 10,
-    fontFamily: "atlas"
   },
   folderItem: {
     flexDirection: "row",

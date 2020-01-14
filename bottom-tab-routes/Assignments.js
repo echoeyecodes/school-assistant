@@ -1,45 +1,64 @@
-import React, { useState, useCallback } from "react";
-import { StyleSheet, Image, View, Text, RefreshControl } from "react-native";
-import { ScrollView } from "react-native-gesture-handler";
-import {FAB} from 'react-native-paper'
-const DueAssignmentsItem = ({ courseCode, desc, time }) => {
+import React, { useState, useCallback, useEffect, useContext } from "react";
+import { StyleSheet, Image, View, Text, RefreshControl,AsyncStorage, TouchableWithoutFeedback } from "react-native";
+import {
+  ScrollView,
+} from "react-native-gesture-handler";
+import { FAB, Snackbar } from "react-native-paper";
+import {ThemeContext} from '../context/ThemeContext'
+
+const DueAssignmentsItem = ({ courseCode, desc, time, date, ...props }) => {
+  let loggedDate = new Date(date).toString();
+  const weekday = loggedDate.split(" ")[0];
+  const month = loggedDate.split(" ")[1];
+  const day = loggedDate.split(" ")[2];
+  const {theme} = useContext(ThemeContext)
+
   return (
-    <View style={styles.dueAssignmentsItem}>
-      <Text style={styles.dueAssignmentsCourseCode}>{courseCode}</Text>
-      <View>
-        <Text style={styles.dueAssignmentsDesc}>{desc}</Text>
+    <TouchableWithoutFeedback
+      onPress={() =>
+        props.navigation.navigate("CreateAssignment", {
+          read: true,
+          courseCode,
+          desc
+        })
+      }
+    >
+      <View style={[styles.dueAssignmentsItem, {borderColor: theme.borderColor}]}>
+        <Text style={[styles.dueAssignmentsCourseCode, {color: theme.colorPrimary}]}>{courseCode}</Text>
         <View>
-          <Text style={styles.dueTimeText}>
-            Due: <Text style={styles.dueTime}>{time}</Text>
+          <Text numberOfLines={8} style={[styles.dueAssignmentsDesc, {color: theme.colorSecondary}]}>
+            {desc}
           </Text>
+          <View>
+            <Text style={[styles.dueTimeText, {color: theme.colorPrimary}]}>
+              Due:{" "}
+              <Text style={styles.dueTime}>
+                {weekday}, {month} {day}
+              </Text>
+            </Text>
+          </View>
         </View>
       </View>
-    </View>
+    </TouchableWithoutFeedback>
   );
 };
-const DueAssignments = ({ date }) => {
+const DueAssignments = ({ assignments, ...props }) => {
+  const {theme} = useContext(ThemeContext)
   return (
-    <View style={styles.dueAssignmentsHolder}>
-      <Text style={styles.dueAssignmentsDate}>{date}</Text>
+    <View style={[styles.dueAssignmentsHolder, {backgroundColor: theme.backgroundColor}]}>
       <View style={styles.gridItem}>
-        <DueAssignmentsItem
-          courseCode="FEG 401"
-          desc="Briefly discuss on the advantages of water to the development of
-            the situation of the Nigerian economy citing vivid ..."
-          time="9:00am"
-        />
-
-        <DueAssignmentsItem
-          courseCode="EEG 431"
-          desc="Calculate the total time required to power a volatge generator of 2500 khZ in 7 mins"
-          time="12:00pm"
-        />
-
-        <DueAssignmentsItem
-          courseCode="EEG 431"
-          desc="Calculate the total time required to power a volatge generator of 2500 khZ in 7 mins"
-          time="12:00pm"
-        />
+        {assignments.map((item, index) => {
+          return (
+            <DueAssignmentsItem
+             {...props}
+              key={index}
+              courseCode={item.courseCode}
+              desc={item.content}
+              time={item.time}
+              date={item.date}
+            />
+          );
+        })}
       </View>
     </View>
   );
@@ -58,34 +77,105 @@ const EmptyAssignments = () => {
   );
 };
 
-const Assignments = () => {
+const Assignments = props => {
   const [refreshing, setRefreshing] = useState(false);
+  const [assignments, setAssignments] = useState([]);
+  const [snackbarShowing, setSnackbarShowing] = useState(false);
+  const {theme} = useContext(ThemeContext)
 
   const refresh = useCallback(() => {
     setRefreshing(true);
+    getServerAssignments();
     setTimeout(() => {
       setRefreshing(false);
     }, 2000);
   }, [refreshing]);
 
+  const getAssignments = async () =>{
+    const assignmentData = await AsyncStorage.getItem('school-assistant-assignments')
+    if(assignmentData){
+      const assignmentArray = JSON.parse(assignmentData)
+
+      const sortedMonth = assignmentArray.sort(
+        (item1, item2) =>
+          parseInt(item1.date.split("-")[1]) -
+          parseInt(item2.date.split("-")[1])
+      );
+      const sortedDay = sortedMonth.sort(
+        (item1, item2) =>
+          parseInt(item1.date.split("-")[2]) -
+          parseInt(item2.date.split("-")[2])
+      );
+      const currentDate = new Date();
+      const recentData = sortedDay
+        .filter(
+          item =>
+            parseInt(item.date.split("-")[1]) >= currentDate.getMonth()
+        )
+        .filter(item => item.date.split("-")[2] >= currentDate.getDate());
+        setAssignments(recentData);
+    }
+    setRefreshing(false)
+  }
+
+  const getServerAssignments = () => {
+    setRefreshing(true)
+    fetch("http://192.168.43.31:3000/assignments", {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json"
+      }
+    }).then(data =>
+      data.json().then(async ({ status, data }) => {
+        if (status === 200) {
+         await AsyncStorage.setItem('school-assistant-assignments', JSON.stringify(data))
+         getAssignments()
+        }
+      })
+    ).catch(error =>{
+      setSnackbarShowing(true)
+      getAssignments()
+    });
+  };
+
+  useEffect(() => {
+    getServerAssignments();
+  }, []);
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, {backgroundColor: theme.backgroundColor}]}>
+        <Snackbar
+        visible={snackbarShowing}
+        onDismiss={() => setSnackbarShowing(false)}
+        duration={2000}
+        action={{
+          label: "Okay",
+          onPress: () => {
+            // Do something
+          }
+        }}
+      >
+        Couldn't connect to Server.
+      </Snackbar>
       <ScrollView
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={refresh} />
         }
       >
-        <DueAssignments date="Monday, Jul 24" />
-        <DueAssignments date="Wednesday, Aug 5" />
+        {assignments.length > 0 ? (
+          <DueAssignments assignments={assignments} {...props} />
+        ) : (
+          <EmptyAssignments  />
+        )}
       </ScrollView>
 
       <FAB
-      style={styles.FAB}
-      onPress={() => console.log('fab')}
-      icon='plus'
-      color='#fff'
+        style={styles.FAB}
+        onPress={() => props.navigation.navigate("CreateAssignment")}
+        icon="plus"
+        color="#fff"
       />
-
     </View>
   );
 };
@@ -93,8 +183,7 @@ const Assignments = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fff",
-    marginHorizontal: 10
+    paddingHorizontal: 10
   },
   emptyAssignmentsContainer: {
     flex: 1,
@@ -102,8 +191,9 @@ const styles = StyleSheet.create({
     alignItems: "center"
   },
   emptyAssignmentImage: {
-    width: 250,
-    height: 250
+    width: 150,
+    height: 150,
+    marginVertical: 10
   },
   emptyMsgStatus: {
     color: "rgba(0,0,0,0.5)",
@@ -139,7 +229,6 @@ const styles = StyleSheet.create({
     flexWrap: "wrap"
   },
   dueAssignmentsDesc: {
-    color: "rgba(0,0,0,0.5)",
     fontFamily: "gochi-hand",
     fontSize: 18,
     maxHeight: 200,
@@ -153,12 +242,12 @@ const styles = StyleSheet.create({
     fontFamily: "normal-default"
   },
   FAB: {
-    position: 'absolute',
+    position: "absolute",
     margin: 16,
     right: 0,
     bottom: 0,
-    backgroundColor: '#4c8bf5'
-  },
+    backgroundColor: "#4c8bf5"
+  }
 });
 
 export default Assignments;

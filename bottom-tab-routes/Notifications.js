@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useContext } from "react";
 import {
   StyleSheet,
   Text,
@@ -8,42 +8,22 @@ import {
   ScrollView,
   RefreshControl
 } from "react-native";
-import { Appbar } from "react-native-paper";
-const TopBar = () => {
-  return (
-    <Appbar.Header style={{ backgroundColor: "white", elevation: 0 }}>
-      <View style={styles.appBarContainer}>
-        <Text style={styles.appBarTitle}>Notifications</Text>
-      </View>
-    </Appbar.Header>
-  );
-};
+import { ThemeContext } from "../context/ThemeContext";
 
 const NotificationsItem = () => {
-  const colors = [
-    "#f4c4f3",
-    "#C9D6FF",
-    "#feb47b",
-    "#89fffd",
-    "#a1ffce",
-    "#faffd1"
-  ];
-  const index = Math.floor(Math.random() * colors.length);
+  const {theme} = useContext(ThemeContext)
   return (
     <TouchableWithoutFeedback>
       <View style={styles.notificationsItemContainer}>
-        <View style={{ flexDirection: "row", alignItems: "center" }}>
-          <Image style={styles.image} source={require("../assets/man.jpg")} />
-
+        <View style={{ flexDirection: "row", alignItems: "center", padding: 10 }}>
           <View
             style={[
               styles.notificationItem,
-              { backgroundColor: colors[index] }
+              { backgroundColor: 'rgba(76, 139, 245, 0.2)' }
             ]}
           >
-            <Text style={styles.notificationDescription}>
-              <Text style={styles.focus}>Jordan </Text>
-              added a new course to <Text style={styles.focus}>Wednesday</Text>
+            <Text style={[styles.notificationDescription, theme.colorPrimary]}>
+              A new course was added to <Text style={styles.focus}>Wednesday</Text>
             </Text>
 
             <View>
@@ -55,18 +35,28 @@ const NotificationsItem = () => {
     </TouchableWithoutFeedback>
   );
 };
-const Notifications = () => {
+const Notifications = (props) => {
   const [refreshing, setRefreshing] = useState(false);
+  const [data, setData] = useState([])
+  const {theme} = useContext(ThemeContext)
 
   const refresh = useCallback(() => {
-    setRefreshing(true);
-    setTimeout(() => {
-      setRefreshing(false);
-    }, 2000);
+    fetchAssignments()
   }, [refreshing]);
+  
+
+  const fetchAssignments = async () =>{
+    setRefreshing(true)
+    const list = await AsyncStorage.getItem('assignments')
+    const realList = JSON.parse(list)
+    setData(realList)
+    setRefreshing(false)
+
+    console.log(realList)
+  }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, {backgroundColor: theme.backgroundColor}]}>
       <View>
         <ScrollView
           refreshControl={
@@ -74,7 +64,7 @@ const Notifications = () => {
           }
         >
           <View style={styles.dateCategory}>
-            <Text style={styles.date}>Today</Text>
+            <Text style={[styles.date, {color: theme.colorPrimary}]}>Today</Text>
             <NotificationsItem />
             <NotificationsItem />
             <NotificationsItem />
@@ -82,7 +72,7 @@ const Notifications = () => {
           </View>
 
           <View style={styles.dateCategory}>
-            <Text style={styles.date}>Earlier</Text>
+            <Text style={[styles.date, {color: theme.colorPrimary}]}>Earlier</Text>
           </View>
           <NotificationsItem />
           <NotificationsItem />
@@ -96,23 +86,16 @@ const Notifications = () => {
   );
 };
 
+
+//enable badge icon on notification
+/* Notifications.navigationOptions={
+  tabBarBadge: true
+} */
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#fff"
-  },
-  appBarContainer: {
-    flex: 1,
-    justifyContent: "flex-start",
-    paddingHorizontal: 5,
-    alignItems: "center",
-    flexDirection: "row"
-  },
-  appBarTitle: {
-    color: "black",
-    fontSize: 22,
-    marginHorizontal: 10,
-    fontFamily: "atlas"
   },
   image: {
     width: 40,
@@ -120,7 +103,6 @@ const styles = StyleSheet.create({
     borderRadius: 20
   },
   notificationsItemContainer: {
-    marginVertical: 5,
     marginHorizontal: 10
   },
   notificationDescription: {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useContext } from "react";
 import {
   StyleSheet,
   Text,
@@ -6,38 +6,42 @@ import {
   TouchableWithoutFeedback,
   Image,
   ScrollView,
-  RefreshControl
+  RefreshControl,
+  CameraRoll
 } from "react-native";
-import { Appbar, FAB, ActivityIndicator } from "react-native-paper";
-import { Ionicons, MaterialIcons } from "@expo/vector-icons";
+import { Appbar, FAB, ActivityIndicator, Snackbar } from "react-native-paper";
+import { Ionicons, MaterialIcons, Feather } from "@expo/vector-icons";
+import ImageViewModal from '../../ModalComponents/ImageView'
 import * as ImagePicker from "expo-image-picker";
 import * as Permissions from "expo-permissions";
-import Constants from 'expo-constants'
-
+import * as FileSystem from 'expo-file-system';
+import {ThemeContext} from '../../context/ThemeContext'
 const TopBar = ({ title, ...props }) => {
+  const {theme} = useContext(ThemeContext)
   return (
-    <Appbar.Header style={{ backgroundColor: "white", elevation: 0 }}>
+    <Appbar.Header style={{ backgroundColor: theme.backgroundColor, elevation: 0 }}>
       <View style={styles.appBarContainer}>
         <TouchableWithoutFeedback onPress={() => props.navigation.goBack()}>
-          <Ionicons name="ios-arrow-back" color="black" size={24} />
+          <Ionicons name="ios-arrow-back" color={theme.colorPrimary} size={24} />
         </TouchableWithoutFeedback>
-        <Text style={styles.greetings}>{title}</Text>
+        <Text style={[styles.greetings, {color: theme.colorPrimary}]}>{title}</Text>
       </View>
     </Appbar.Header>
   );
 };
 
 const UploadingImages = () => {
+  const {theme} = useContext(ThemeContext)
   return (
     <View style={styles.uploadingImagesItem}>
-      <View style={[styles.thumbnailHolder, {justifyContent: 'center',alignItems: 'center'}]}>
+      <View style={[styles.defaultImage]}>
       <MaterialIcons name="image" color="#de5246" size={28} />
       </View>
       <View style={styles.uploadingImageDesc}>
-        <Text style={styles.uploadingImageFileName}>
+        <Text style={[styles.uploadingImageFileName, {color: theme.colorPrimary}]}>
           Photo12dfre43fdsfsd.jpg
         </Text>
-        <Text style={styles.uploadingImageTimeStamp}>Dec. 12</Text>
+        <Text style={[styles.uploadingImageTimeStamp, {color: theme.colorSecondary}]}>Dec. 12</Text>
       </View>
       <ActivityIndicator
         style={styles.activityIndicator}
@@ -48,27 +52,39 @@ const UploadingImages = () => {
   );
 };
 
-const UploadedImages =({uri, filename}) =>{
+const UploadedImages =({uri, filename, enableShowImage, downloadImage}) =>{
+  const {theme} = useContext(ThemeContext)
   const first = uri.split('upload').shift()
   const last = uri.split('upload').pop()
   const compressedUrl = `${first}/upload/q_auto:low/${last}`
 
   return(
-  <View style={[styles.uploadingImagesItem, {opacity: 1}]}>
     <View style={styles.thumbnailHolder}>
-    <Image style={styles.thumbnail} source={{uri: compressedUrl}} />
-    </View>
-    <View style={[styles.uploadingImageDesc,{marginHorizontal: 10}]}>
-        <Text style={styles.uploadingImageFileName}>
+      <View style={styles.thumbnailToolbar}>
+        <View>
+        <MaterialIcons name="image" color="#de5246" size={28} />
+        </View>
+
+        <View>
+        <Text style={[styles.uploadingImageFileName, {color: theme.colorPrimary}]}>
           {filename}
         </Text>
-        <Text style={styles.uploadingImageTimeStamp}>Dec. 12</Text>
+        </View>
+
+        <TouchableWithoutFeedback onPress={() => downloadImage(uri)}>
+        <View style={styles.moreBtn}>
+        <Feather name='download' size={28} color={theme.colorPrimary} />
+      </View>
+      </TouchableWithoutFeedback>
       </View>
 
-      <View style={styles.moreBtn}>
-        <Ionicons name='md-more' size={28} color='black' />
+      <TouchableWithoutFeedback onPress={() => enableShowImage(uri)}>
+      <View style={styles.imageHolder}>
+      <Image style={styles.thumbnail} source={{uri: compressedUrl}} />
       </View>
-  </View>
+      </TouchableWithoutFeedback>
+    
+    </View>
   )
 }
 
@@ -77,7 +93,9 @@ const FolderItem = props => {
   const [refreshing, setRefreshing] = useState(false)
   const [uploadedImage, setUploadedImage] = useState([]);
   const [images, setImages] = useState([]);
-  const cache = useRef(null)
+  const [showImage, setShowImage] = useState({visible: false, data: null})
+  const [showSnackbar, setShowSnackBar] = useState(false)
+  const {theme} = useContext(ThemeContext)
 
   const getPermissionAsync = async () => {
     const { status } = await Permissions.askAsync(Permissions.CAMERA_ROLL);
@@ -86,6 +104,14 @@ const FolderItem = props => {
       return;
     }
   };
+
+  const enableShowImage = (uri) =>{
+    if(showImage.visible){
+      setShowImage({visible: false, data: null})
+      return
+    }
+    setShowImage({visible: true, data: uri})
+  }
 
   const pickImage = () => {
     getPermissionAsync().then(async data => {
@@ -167,19 +193,46 @@ const FolderItem = props => {
     getImages()
   }
 
+  const downloadImage = async (url) =>{
+    const filetype = url.split('.').pop()
+    const folder = await FileSystem.getInfoAsync(FileSystem.documentDirectory + 'SchoolAssistant')
+    if(!folder.exists){
+      await FileSystem.makeDirectoryAsync(FileSystem.documentDirectory + 'SchoolAssistant',{intermediates: true})
+    }
+    const {uri} = await FileSystem.downloadAsync(url, FileSystem.documentDirectory + 'SchoolAssistant/'  + `file.${filetype}`)
+    CameraRoll.saveToCameraRoll(uri, 'photo').then(data =>{
+      setShowSnackBar(true)
+    })
+
+  }
+
   useEffect(() => {
     getImages()
   }, []);
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, {backgroundColor: theme.backgroundColor}]}>
+      <ImageViewModal visible={showImage.visible} data={showImage.data} enableShowImage={enableShowImage} />
+      <Snackbar
+          visible={showSnackbar}
+          onDismiss={() => setShowSnackBar(false)}
+          duration={2000}
+          action={{
+            label: 'OKAY',
+            onPress: () => {
+              setShowSnackBar(false)
+            },
+          }}
+        >
+          File downloaded successfully
+        </Snackbar>
       <TopBar {...props} title={appBarTitle} />
       <ScrollView refreshControl={
         <RefreshControl refreshing={refreshing} onRefresh={refresh} />
       }>
       <View style={styles.uploadingImagesContainer}>
         {images.length > 0 ? (
-          <Text style={{ color: "rgba(0,0,0,0.5)", fontSize: 16 }}>
+          <Text style={{ color: theme.colorSecondary, fontSize: 16 }}>
             Uploading
           </Text>
         ) : null}
@@ -191,7 +244,7 @@ const FolderItem = props => {
       <View style={[styles.uploadingImagesContainer, {marginVertical: 10}]}>
       {uploadedImage.map((item, index) =>{
         return(
-        <UploadedImages key={item.id} uri={item.data.url} filename={item.data.filename} />
+        <UploadedImages key={item.id} uri={item.data.url} filename={item.data.filename} downloadImage={downloadImage} enableShowImage={enableShowImage} />
         )
       })}
       </View>
@@ -238,10 +291,11 @@ const styles = StyleSheet.create({
     justifyContent: "flex-start",
     alignItems: "center",
     marginVertical: 5,
-    opacity: 0.5
+    opacity: 0.5,
+    height: 40
   },
   uploadingImageDesc: {
-    marginLeft: "auto",
+    marginLeft: 10,
     flex: 1
   },
   activityIndicator: {
@@ -258,10 +312,27 @@ const styles = StyleSheet.create({
     fontFamily: "normal-default",
     fontSize: 16
   },
+  thumbnailToolbar:{
+    flexDirection: 'row',
+    alignItems:'center',
+    justifyContent: 'flex-start',
+    marginBottom: 10
+  },
+  defaultImage:{
+    width: 30,
+    height: 30
+  },
   thumbnailHolder:{
-    width: 80,
-    height: 80,
-    borderRadius: 5
+    width: '100%',
+    height: 200,
+    borderRadius: 5,
+    marginVertical: 15
+  },
+  imageHolder:{
+    flex: 1,
+    borderRadius: 5,
+    height: 100,
+    elevation: 1
   },
   thumbnail:{
     width: null,

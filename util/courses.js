@@ -25,7 +25,7 @@ const data =[
         startTime: '3:00pm',
         endTime: '5:00pm',
         startTimeSeconds:54000,
-        endTimeSeconds:80000,
+        endTimeSeconds:61200,
         location: 'Agric. hall II',
         lecturer: 'Engr. Olajide'
     },
